@@ -1,0 +1,18 @@
+[Unit]
+Description=Velocity Scalper 24/7 Automated Trading Daemon
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=/home/rahat/Documents/claude/aggresive
+ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle:handle-lid-switch --who=VelocityScalper --why="24/7 Scalper Trading Daemon" --mode=block "/home/rahat/Documents/claude/Gold Digger/venv/bin/python" -m uvicorn app:app --host 0.0.0.0 --port 8088
+Restart=always
+RestartSec=3
+StandardOutput=append:/home/rahat/Documents/claude/aggresive/server.log
+StandardError=append:/home/rahat/Documents/claude/aggresive/server.log
+KillMode=mixed
+TimeoutStopSec=10
+
+[Install]
+WantedBy=default.target

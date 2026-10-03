@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Velocity Scalper | Aggressive 5m Quantitative Engine</title>
+  <meta name="description" content="High-frequency 5-minute dynamic momentum scalping engine for Binance Futures with automated break-even locks and daily target defense.">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+  <!-- Top Header Navigation -->
+  <header>
+    <div class="brand">
+      <div class="brand-icon">⚡</div>
+      <div class="brand-title">
+        <h1>VELOCITY SCALPER</h1>
+        <p>5M Aggressive Quant Engine • $100 Allocation</p>
+      </div>
+    </div>
+
+    <div class="header-status">
+      <div id="engineStatusPill" class="badge-pill">
+        <span class="pulse-dot" id="pulseDot"></span>
+        <span id="engineStatusText">SYSTEM ACTIVE</span>
+      </div>
+      <div id="modePill" class="badge-pill mode-tag">
+        <span id="tradingModeText">PAPER TRADING</span>
+      </div>
+      <button id="btnToggleEngine" class="control-btn btn-pause" onclick="toggleEngine()">
+        <span id="btnToggleIcon">⏸️</span>
+        <span id="btnToggleText">Pause Bot</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="container">
+
+    <!-- KPI Summary Row -->
+    <section class="kpi-grid">
+      <!-- Total Capital -->
+      <div class="kpi-card" id="kpiCapitalCard">
+        <div class="kpi-header">
+          <span class="kpi-title">Current Balance</span>
+          <span class="kpi-icon">💰</span>
+        </div>
+        <div class="kpi-value" id="valCurrentBalance">$100.00</div>
+        <div class="kpi-sub">
+          <span>Starting Base:</span>
+          <strong id="valStartingBase">$100.00</strong>
+        </div>
+      </div>
+
+      <!-- Today's PnL & Daily Target -->
+      <div class="kpi-card" id="kpiTargetCard">
+        <div class="kpi-header">
+          <span class="kpi-title">Today's Profit Goal</span>
+          <span class="kpi-icon">🎯</span>
+        </div>
+        <div class="kpi-value" id="valTodayPnL">+$0.00</div>
+        <div class="kpi-sub">
+          <span id="targetProgressLabel">Progress to $3.00 Target: 0%</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="targetProgressBar" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <!-- Circuit Breaker Defense -->
+      <div class="kpi-card" id="kpiCircuitCard">
+        <div class="kpi-header">
+          <span class="kpi-title">Circuit Breaker</span>
+          <span class="kpi-icon">🛡️</span>
+        </div>
+        <div class="kpi-value" id="valCircuitStatus" style="font-size: 22px; color: var(--profit-green);">NORMAL</div>
+        <div class="kpi-sub">
+          <span>Max Daily Loss Limit:</span>
+          <strong style="color: var(--loss-red);">-$3.00 (3%)</strong>
+        </div>
+      </div>
+
+      <!-- Win Rate & Trades -->
+      <div class="kpi-card" id="kpiWinRateCard">
+        <div class="kpi-header">
+          <span class="kpi-title">Win Rate & Trades</span>
+          <span class="kpi-icon">📈</span>
+        </div>
+        <div class="kpi-value" id="valWinRate">0.0%</div>
+        <div class="kpi-sub">
+          <span>Today: </span>
+          <strong id="valTradesCount">0 Wins / 0 Losses</strong>
+        </div>
+      </div>
+    </section>
+
+    <!-- Hero Section: Active Position & Multi-Pair Radar -->
+    <section class="hero-grid">
+      <!-- Active Trade Hero Card -->
+      <div class="panel-card" id="activeTradePanel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>🔥</span> Active Scalp Execution
+          </div>
+          <span id="activePositionBadge" class="badge-pill" style="font-size: 11px;">10X ISOLATED MARGIN</span>
+        </div>
+
+        <!-- Dynamic Content: Active Trade or Scanning State -->
+        <div id="activeTradeContainer" class="active-trade-box">
+          <div class="empty-trade-state">
+            <div class="radar-spinner"></div>
+            <h3 style="font-size: 16px; font-weight: 700;">Scanning 5m Candles...</h3>
+            <p style="font-size: 12px; color: var(--text-dim); max-width: 380px;">
+              Velocity Engine is actively analyzing SOLUSDT, BTCUSDT, and ETHUSDT for high-probability 9/21 EMA pullback setups with 200 EMA regime confirmation.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Multi-Pair Live Radar -->
+      <div class="panel-card" id="radarPanel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📡</span> Live Market Radar Matrix (1H)
+          </div>
+          <span class="badge-pill" style="font-size: 11px;">AUTO-REFRESH 3S</span>
+        </div>
+
+        <div class="radar-list" id="radarList">
+          <!-- Dynamically populated via JS -->
+          <div style="text-align: center; color: var(--text-dim); padding: 40px;">Loading radar data...</div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Lower Section: Trade History & Terminal Logs -->
+    <section class="lower-grid">
+      <!-- Trade History Table -->
+      <div class="panel-card" id="historyPanel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>📜</span> Recent Closed Trades
+          </div>
+          <span class="badge-pill" style="font-size: 11px;">NET OF ALL FEES</span>
+        </div>
+        <div class="table-wrap">
+          <table id="tradesTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Pair</th>
+                <th>Side</th>
+                <th>Entry</th>
+                <th>Exit</th>
+                <th>Duration</th>
+                <th>Net PnL</th>
+                <th>Reason</th>
+              </tr>
+            </thead>
+            <tbody id="tradesTableBody">
+              <tr>
+                <td colspan="8" style="text-align: center; color: var(--text-dim); padding: 25px;">No closed trades yet today.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Live Terminal Console -->
+      <div class="panel-card" id="terminalPanel">
+        <div class="panel-header">
+          <div class="panel-title">
+            <span>💻</span> Engine Live Feed
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="live-pulse-dot" title="Live Continuous Feed"></span>
+            <span class="badge-pill" style="font-size: 11px; color: var(--neon-cyan); border-color: rgba(56, 189, 248, 0.4);">LIVE FEED (NEWEST ON TOP)</span>
+          </div>
+        </div>
+        <div class="terminal-window" id="terminalLogs">
+          <!-- Logs appended via JS -->
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js?v=3"></script>
+</body>
+</html>
