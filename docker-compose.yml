@@ -1,0 +1,14 @@
+services:
+  velocity-scalper:
+    build: .
+    container_name: velocity_scalper
+    restart: unless-stopped
+    ports:
+      - "8088:8088"
+    volumes:
+      - ./bot_state.json:/app/bot_state.json
+      - ./logs:/app/logs
+      - ./data:/app/data
+      - ./.env:/app/.env:ro
+    environment:
+      - PYTHONUNBUFFERED=1
