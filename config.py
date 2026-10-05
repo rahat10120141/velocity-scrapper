@@ -67,6 +67,65 @@ PARAMS = {
     "fee_rate": 0.0004       # 0.04% taker fee per leg (0.08% roundtrip)
 }
 
+# --- TRI-ENGINE QUANTITATIVE CONFIGURATIONS ---
+ENGINE_CONFIGS = {
+    "ladder": {
+        "id": "ladder",
+        "name": "Hybrid Ladder-Lock",
+        "badge": "🛡️ LADDER",
+        "description": "3-Stage Profit Ladder: +0.25% Fee Shield, +1.0R Step Lock, +1.5R Step Lock, +2.2R TP",
+        "starting_capital": 100.0,
+        "allocated_margin": 25.0,
+        "leverage": 5,
+        "max_positions": 3,
+        "daily_target": 3.0,
+        "daily_max_loss": 3.0,
+        "early_be_trigger_pct": 0.0025, # +0.25% profit triggers early BE
+        "fee_shield_offset": 0.0010,     # +0.10% lock (guarantees net green exit after fees)
+        "step_1_r_trigger": 1.0,         # +1.0R profit triggers step 1
+        "step_1_r_lock": 0.40,           # lock at +0.40R
+        "step_2_r_trigger": 1.5,         # +1.5R profit triggers step 2
+        "step_2_r_lock": 1.00,           # lock at +1.00R
+        "tp_r": 2.2,                     # +2.2R full Take-Profit
+        "state_file": "bot_state_ladder.json"
+    },
+    "trailing": {
+        "id": "trailing",
+        "name": "Balanced Trailing Scalper",
+        "badge": "⚡ TRAILING",
+        "description": "Dynamic Trailing: +0.25% Fee Shield, 0.28% High-Watermark Trailing @ +0.50%, +2.2R TP",
+        "starting_capital": 100.0,
+        "allocated_margin": 25.0,
+        "leverage": 5,
+        "max_positions": 3,
+        "daily_target": 3.0,
+        "daily_max_loss": 3.0,
+        "early_be_trigger_pct": 0.0025, # +0.25% profit triggers early BE
+        "fee_shield_offset": 0.0010,     # +0.10% lock
+        "trailing_trigger_pct": 0.0050,  # +0.50% profit triggers trailing ratchet
+        "trailing_dist_pct": 0.0028,     # 0.28% trail distance behind peak
+        "tp_r": 2.2,
+        "state_file": "bot_state_trailing.json"
+    },
+    "runner": {
+        "id": "runner",
+        "name": "Swing Runner (Baseline)",
+        "badge": "🎯 RUNNER",
+        "description": "High-Conviction Swing Runner: +1.0R Break-Even, Wide +2.2R Take-Profit Target",
+        "starting_capital": 100.0,
+        "allocated_margin": 25.0,
+        "leverage": 5,
+        "max_positions": 3,
+        "daily_target": 3.0,
+        "daily_max_loss": 3.0,
+        "be_trigger_r": 1.0,             # +1.0R profit triggers BE
+        "be_fee_offset": 0.0018,         # +0.18% lock
+        "tp_r": 2.2,
+        "state_file": "bot_state_runner.json"
+    }
+}
+
 # Web Server
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 8088
+
