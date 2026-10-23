@@ -1,0 +1,15 @@
+# ==============================================================================
+# VELOCITY SCALPER: LiteSpeed Web Server & CloudLinux Passenger Rules
+# ==============================================================================
+
+<IfModule Litespeed>
+    RewriteEngine On
+    # Prevent LiteSpeed connection timeouts & request abortion
+    RewriteRule .* - [E=noabort:1, E=noconntimeout:1]
+</IfModule>
+
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION BEGIN
+PassengerAppRoot "/home/ragorytech/test.invisoftware.com"
+PassengerBaseURI "/"
+PassengerPython "/home/ragorytech/virtualenv/test.invisoftware.com/3.11/bin/python"
+# DO NOT REMOVE. CLOUDLINUX PASSENGER CONFIGURATION END

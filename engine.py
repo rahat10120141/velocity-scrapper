@@ -87,8 +87,11 @@ class SingleEngineInstance:
                         data["active_positions"] = []
                         if data.get("active_position"):
                             data["active_positions"].append(data["active_position"])
-
                     data["max_open_positions"] = self.config.get("max_positions", MAX_OPEN_POSITIONS)
+                    data["daily_target"] = self.config.get("daily_target", DAILY_PROFIT_TARGET_USDT)
+                    data["daily_max_loss"] = self.config.get("daily_max_loss", DAILY_MAX_LOSS_USDT)
+                    data["allocated_margin"] = self.config.get("allocated_margin", ALLOCATED_MARGIN_USDT)
+                    data["leverage"] = self.config.get("leverage", LEVERAGE)
                     return data
             except Exception as e:
                 print(f"Error loading state for {self.engine_id}: {e}")
@@ -153,59 +156,65 @@ class SingleEngineInstance:
                     gain_r = (highest_p - entry_p) / sl_dist if sl_dist > 0 else 0.0
 
                     if self.engine_id == "ladder":
-                        # Ladder Step 1: Early Fee Shield (+0.25% gain -> lock +0.10%)
-                        if not pos.get("shield_locked") and gain_pct >= self.config["early_be_trigger_pct"]:
-                            be_sl = round(entry_p * (1.0 + self.config["fee_shield_offset"]), 4)
-                            if be_sl > pos["sl_price"]:
-                                pos["sl_price"] = be_sl
-                                pos["be_locked"] = True
-                            pos["shield_locked"] = True
-                            self._save_state()
-                            log_fn(f"{self.badge} 🛡️ EARLY FEE SHIELD on {sym} LONG! SL moved to ${be_sl} (+0.10%). Zero risk!", "PROFIT")
+                        s1_trig = self.config.get("step_1_r_trigger", 1.0)
+                        s1_lock = self.config.get("step_1_r_lock", 0.50)
+                        s2_trig = self.config.get("step_2_r_trigger", 1.8)
+                        s2_lock = self.config.get("step_2_r_lock", 1.20)
 
-                        # Ladder Step 2: Step Lock at +1.0R -> lock +0.40R
-                        if not pos.get("step1_locked") and gain_r >= self.config["step_1_r_trigger"]:
-                            s1_sl = round(entry_p + (self.config["step_1_r_lock"] * sl_dist), 4)
+                        # Ladder Step 1: Step Lock at +1.0R -> lock +0.50R
+                        if not pos.get("step1_locked") and gain_r >= s1_trig:
+                            s1_sl = round(entry_p + (s1_lock * sl_dist), 4)
                             if s1_sl > pos["sl_price"]:
                                 pos["sl_price"] = s1_sl
                             pos["step1_locked"] = True
+                            pos["be_locked"] = True
+                            pos["step"] = 1
                             self._save_state()
-                            log_fn(f"{self.badge} 🪜 STEP 1 PROFIT LOCK on {sym} LONG! SL raised to ${s1_sl} (+0.40R locked).", "PROFIT")
+                            log_fn(f"{self.badge} 🪜 STEP 1 PROFIT LOCK on {sym} LONG! SL raised to ${s1_sl} (+{s1_lock}R locked).", "PROFIT")
 
-                        # Ladder Step 3: Step Lock at +1.5R -> lock +1.0R
-                        if not pos.get("step2_locked") and gain_r >= self.config["step_2_r_trigger"]:
-                            s2_sl = round(entry_p + (self.config["step_2_r_lock"] * sl_dist), 4)
+                        # Ladder Step 2: Step Lock at +1.8R -> lock +1.20R
+                        if not pos.get("step2_locked") and gain_r >= s2_trig:
+                            s2_sl = round(entry_p + (s2_lock * sl_dist), 4)
                             if s2_sl > pos["sl_price"]:
                                 pos["sl_price"] = s2_sl
                             pos["step2_locked"] = True
+                            pos["step"] = 2
                             self._save_state()
-                            log_fn(f"{self.badge} 🪜 STEP 2 PROFIT LOCK on {sym} LONG! SL raised to ${s2_sl} (+1.00R locked).", "PROFIT")
+                            log_fn(f"{self.badge} 🪜 STEP 2 PROFIT LOCK on {sym} LONG! SL raised to ${s2_sl} (+{s2_lock}R locked).", "PROFIT")
 
                     elif self.engine_id == "trailing":
-                        # Fee shield at +0.25%
-                        if not pos.get("shield_locked") and gain_pct >= self.config["early_be_trigger_pct"]:
-                            be_sl = round(entry_p * (1.0 + self.config["fee_shield_offset"]), 4)
+                        be_trig = self.config.get("be_trigger_r", 1.2)
+                        trail_trig = self.config.get("trailing_trigger_r", 1.6)
+                        trail_r = self.config.get("trailing_dist_r", 0.60)
+                        be_fee = self.config.get("fee_shield_offset", 0.0018)
+
+                        # Break-even shield at +1.2R
+                        if not pos.get("be_locked") and gain_r >= be_trig:
+                            be_sl = round(entry_p * (1.0 + be_fee), 4)
                             if be_sl > pos["sl_price"]:
                                 pos["sl_price"] = be_sl
-                                pos["be_locked"] = True
-                            pos["shield_locked"] = True
+                            pos["be_locked"] = True
                             self._save_state()
-                            log_fn(f"{self.badge} 🛡️ EARLY FEE SHIELD on {sym} LONG! SL moved to ${be_sl} (+0.10%). Zero risk!", "PROFIT")
+                            log_fn(f"{self.badge} 🛡️ BREAK-EVEN ACTIVATED on {sym} LONG! SL moved to ${be_sl} (+0.18%).", "PROFIT")
 
-                        # Dynamic Trailing at +0.50% gain
-                        if gain_pct >= self.config["trailing_trigger_pct"]:
+                        # Dynamic Trailing Ratchet at +1.6R (trails 0.60 * sl_dist behind peak)
+                        if gain_r >= trail_trig:
                             pos["trail_active"] = True
-                            trail_sl = round(highest_p * (1.0 - self.config["trailing_dist_pct"]), 4)
+                            trail_sl = round(highest_p - (trail_r * sl_dist), 4)
                             if trail_sl > pos["sl_price"]:
                                 pos["sl_price"] = trail_sl
                                 self._save_state()
-                                log_fn(f"{self.badge} ⚡ TRAILING RATCHET on {sym} LONG! SL raised to ${trail_sl} (trailing 0.28% behind peak ${highest_p}).", "TICK")
+                                log_fn(f"{self.badge} ⚡ TRAILING RATCHET on {sym} LONG! SL raised to ${trail_sl} (trailing {trail_r}R behind peak ${highest_p}).", "TICK")
 
                     elif self.engine_id == "runner":
-                        # Baseline Break-Even (+1.0R)
-                        if not pos.get("be_locked") and curr_p >= pos.get("be_trigger", entry_p + sl_dist):
-                            new_sl = round(entry_p * (1.0 + self.config["be_fee_offset"]), 4)
-                            pos["sl_price"] = new_sl
+                        be_trig = self.config.get("be_trigger_r", 1.2)
+                        be_fee = self.config.get("be_fee_offset", 0.0018)
+
+                        # Baseline Break-Even (+1.2R)
+                        if not pos.get("be_locked") and gain_r >= be_trig:
+                            new_sl = round(entry_p * (1.0 + be_fee), 4)
+                            if new_sl > pos["sl_price"]:
+                                pos["sl_price"] = new_sl
                             pos["be_locked"] = True
                             self._save_state()
                             log_fn(f"{self.badge} 🛡️ BREAK-EVEN ACTIVATED on {sym} LONG! SL moved to ${new_sl} (+0.18%).", "PROFIT")
@@ -216,12 +225,12 @@ class SingleEngineInstance:
                         continue
                     elif curr_p <= pos["sl_price"]:
                         if pos.get("step2_locked"):
-                            reason = "PROFIT_LOCK_1.5R"
+                            reason = "PROFIT_LOCK_1.8R"
                         elif pos.get("step1_locked"):
                             reason = "PROFIT_LOCK_1.0R"
                         elif pos.get("trail_active"):
                             reason = "TRAILING_STOP"
-                        elif pos.get("shield_locked") or pos.get("be_locked"):
+                        elif pos.get("be_locked") or pos.get("shield_locked"):
                             reason = "BREAK_EVEN"
                         else:
                             reason = "STOP_LOSS"
@@ -233,53 +242,65 @@ class SingleEngineInstance:
                     gain_r = (entry_p - lowest_p) / sl_dist if sl_dist > 0 else 0.0
 
                     if self.engine_id == "ladder":
-                        if not pos.get("shield_locked") and gain_pct >= self.config["early_be_trigger_pct"]:
-                            be_sl = round(entry_p * (1.0 - self.config["fee_shield_offset"]), 4)
-                            if be_sl < pos["sl_price"]:
-                                pos["sl_price"] = be_sl
-                                pos["be_locked"] = True
-                            pos["shield_locked"] = True
-                            self._save_state()
-                            log_fn(f"{self.badge} 🛡️ EARLY FEE SHIELD on {sym} SHORT! SL moved to ${be_sl} (+0.10%). Zero risk!", "PROFIT")
+                        s1_trig = self.config.get("step_1_r_trigger", 1.0)
+                        s1_lock = self.config.get("step_1_r_lock", 0.50)
+                        s2_trig = self.config.get("step_2_r_trigger", 1.8)
+                        s2_lock = self.config.get("step_2_r_lock", 1.20)
 
-                        if not pos.get("step1_locked") and gain_r >= self.config["step_1_r_trigger"]:
-                            s1_sl = round(entry_p - (self.config["step_1_r_lock"] * sl_dist), 4)
+                        # Ladder Step 1: Step Lock at +1.0R -> lock +0.50R
+                        if not pos.get("step1_locked") and gain_r >= s1_trig:
+                            s1_sl = round(entry_p - (s1_lock * sl_dist), 4)
                             if s1_sl < pos["sl_price"]:
                                 pos["sl_price"] = s1_sl
                             pos["step1_locked"] = True
+                            pos["be_locked"] = True
+                            pos["step"] = 1
                             self._save_state()
-                            log_fn(f"{self.badge} 🪜 STEP 1 PROFIT LOCK on {sym} SHORT! SL lowered to ${s1_sl} (+0.40R locked).", "PROFIT")
+                            log_fn(f"{self.badge} 🪜 STEP 1 PROFIT LOCK on {sym} SHORT! SL lowered to ${s1_sl} (+{s1_lock}R locked).", "PROFIT")
 
-                        if not pos.get("step2_locked") and gain_r >= self.config["step_2_r_trigger"]:
-                            s2_sl = round(entry_p - (self.config["step_2_r_lock"] * sl_dist), 4)
+                        # Ladder Step 2: Step Lock at +1.8R -> lock +1.20R
+                        if not pos.get("step2_locked") and gain_r >= s2_trig:
+                            s2_sl = round(entry_p - (s2_lock * sl_dist), 4)
                             if s2_sl < pos["sl_price"]:
                                 pos["sl_price"] = s2_sl
                             pos["step2_locked"] = True
+                            pos["step"] = 2
                             self._save_state()
-                            log_fn(f"{self.badge} 🪜 STEP 2 PROFIT LOCK on {sym} SHORT! SL lowered to ${s2_sl} (+1.00R locked).", "PROFIT")
+                            log_fn(f"{self.badge} 🪜 STEP 2 PROFIT LOCK on {sym} SHORT! SL lowered to ${s2_sl} (+{s2_lock}R locked).", "PROFIT")
 
                     elif self.engine_id == "trailing":
-                        if not pos.get("shield_locked") and gain_pct >= self.config["early_be_trigger_pct"]:
-                            be_sl = round(entry_p * (1.0 - self.config["fee_shield_offset"]), 4)
+                        be_trig = self.config.get("be_trigger_r", 1.2)
+                        trail_trig = self.config.get("trailing_trigger_r", 1.6)
+                        trail_r = self.config.get("trailing_dist_r", 0.60)
+                        be_fee = self.config.get("fee_shield_offset", 0.0018)
+
+                        # Break-even shield at +1.2R
+                        if not pos.get("be_locked") and gain_r >= be_trig:
+                            be_sl = round(entry_p * (1.0 - be_fee), 4)
                             if be_sl < pos["sl_price"]:
                                 pos["sl_price"] = be_sl
-                                pos["be_locked"] = True
-                            pos["shield_locked"] = True
+                            pos["be_locked"] = True
                             self._save_state()
-                            log_fn(f"{self.badge} 🛡️ EARLY FEE SHIELD on {sym} SHORT! SL moved to ${be_sl} (+0.10%). Zero risk!", "PROFIT")
+                            log_fn(f"{self.badge} 🛡️ BREAK-EVEN ACTIVATED on {sym} SHORT! SL moved to ${be_sl} (+0.18%).", "PROFIT")
 
-                        if gain_pct >= self.config["trailing_trigger_pct"]:
+                        # Dynamic Trailing Ratchet at +1.6R (trails 0.60 * sl_dist behind trough)
+                        if gain_r >= trail_trig:
                             pos["trail_active"] = True
-                            trail_sl = round(lowest_p * (1.0 + self.config["trailing_dist_pct"]), 4)
+                            trail_sl = round(lowest_p + (trail_r * sl_dist), 4)
                             if trail_sl < pos["sl_price"]:
                                 pos["sl_price"] = trail_sl
                                 self._save_state()
-                                log_fn(f"{self.badge} ⚡ TRAILING RATCHET on {sym} SHORT! SL lowered to ${trail_sl} (trailing 0.28% behind trough ${lowest_p}).", "TICK")
+                                log_fn(f"{self.badge} ⚡ TRAILING RATCHET on {sym} SHORT! SL lowered to ${trail_sl} (trailing {trail_r}R behind trough ${lowest_p}).", "TICK")
 
                     elif self.engine_id == "runner":
-                        if not pos.get("be_locked") and curr_p <= pos.get("be_trigger", entry_p - sl_dist):
-                            new_sl = round(entry_p * (1.0 - self.config["be_fee_offset"]), 4)
-                            pos["sl_price"] = new_sl
+                        be_trig = self.config.get("be_trigger_r", 1.2)
+                        be_fee = self.config.get("be_fee_offset", 0.0018)
+
+                        # Baseline Break-Even (+1.2R)
+                        if not pos.get("be_locked") and gain_r >= be_trig:
+                            new_sl = round(entry_p * (1.0 - be_fee), 4)
+                            if new_sl < pos["sl_price"]:
+                                pos["sl_price"] = new_sl
                             pos["be_locked"] = True
                             self._save_state()
                             log_fn(f"{self.badge} 🛡️ BREAK-EVEN ACTIVATED on {sym} SHORT! SL moved to ${new_sl} (+0.18%).", "PROFIT")
@@ -290,12 +311,12 @@ class SingleEngineInstance:
                         continue
                     elif curr_p >= pos["sl_price"]:
                         if pos.get("step2_locked"):
-                            reason = "PROFIT_LOCK_1.5R"
+                            reason = "PROFIT_LOCK_1.8R"
                         elif pos.get("step1_locked"):
                             reason = "PROFIT_LOCK_1.0R"
                         elif pos.get("trail_active"):
                             reason = "TRAILING_STOP"
-                        elif pos.get("shield_locked") or pos.get("be_locked"):
+                        elif pos.get("be_locked") or pos.get("shield_locked"):
                             reason = "BREAK_EVEN"
                         else:
                             reason = "STOP_LOSS"
@@ -355,7 +376,16 @@ class SingleEngineInstance:
 
     def _open_position(self, sym, direction, price, sl_price, tp_price, be_trigger, atr, log_fn):
         sl_dist = abs(price - sl_price) if sl_price > 0 else (atr if atr > 0 else price * 0.006)
-        risk_usd = PARAMS["risk_per_trade_usd"]
+        tp_r = self.config.get("tp_r", PARAMS.get("rr_ratio", 2.6))
+        be_r = self.config.get("be_trigger_r", 1.2)
+        if direction == "LONG":
+            tp_price = round(price + (tp_r * sl_dist), 4)
+            be_trigger = round(price + (be_r * sl_dist), 4)
+        else:
+            tp_price = round(price - (tp_r * sl_dist), 4)
+            be_trigger = round(price - (be_r * sl_dist), 4)
+
+        risk_usd = self.config.get("risk_per_trade_usd", PARAMS.get("risk_per_trade_usd", 3.00))
         margin_setting = self.config.get("allocated_margin", ALLOCATED_MARGIN_USDT)
         lev = self.config.get("leverage", LEVERAGE)
 
@@ -382,6 +412,7 @@ class SingleEngineInstance:
             "atr": atr,
             "highest_p": price,
             "lowest_p": price,
+            "step": 0,
             "shield_locked": False,
             "step1_locked": False,
             "step2_locked": False,
@@ -475,7 +506,7 @@ class SingleEngineInstance:
         elif daily_pnl <= -self.state["daily_max_loss"]:
             self.state["circuit_breaker"] = "LOSS_LOCKED"
             self._save_state()
-            log_fn(f"{self.badge} 🛡️ CIRCUIT BREAKER DEFENSE TRIGGERED: Daily Loss ${daily_pnl:.2f} reached -$3 cap. Engine HALTED for today!", "DEFENSE")
+            log_fn(f"{self.badge} 🛡️ CIRCUIT BREAKER DEFENSE TRIGGERED: Daily Loss ${daily_pnl:.2f} reached -${self.state['daily_max_loss']:.2f} cap. Engine HALTED for today!", "DEFENSE")
 
     def emergency_close_active(self, symbol=None, current_prices=None, log_fn=print):
         with self.lock:
@@ -576,7 +607,20 @@ class VelocityEngine:
         try:
             self.cycle_count += 1
 
-            # 1. Update Market Radar once for all 6 coins (0 duplicate API calls)
+            # 0. Midnight UTC Daily Reset Check (Prevents deadlock in LOSS_LOCKED across days)
+            today_str = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+            for engine_id, eng in self.engines.items():
+                if eng.state.get("today_date") != today_str:
+                    old_date = eng.state.get("today_date", "UNKNOWN")
+                    eng.state["today_date"] = today_str
+                    eng.state["today_realized_pnl"] = 0.0
+                    eng.state["today_wins"] = 0
+                    eng.state["today_losses"] = 0
+                    eng.state["circuit_breaker"] = "NORMAL"
+                    eng._save_state()
+                    self._log(f"{eng.badge} Daily Midnight Rollover: {old_date} -> {today_str}. Circuit breaker restored to NORMAL.", "ACTION")
+
+            # 1. Update Market Radar once for all configured coins (0 duplicate API calls)
             for sym in SYMBOLS:
                 try:
                     df = self.client.fetch_klines(sym, interval=DEFAULT_TIMEFRAME, limit=250)
@@ -751,6 +795,20 @@ class VelocityEngine:
             self._log(f"Trading mode switched to {mode} ({engine_id})", "ACTION")
 
     def run_forever(self):
+        lock_file_path = os.path.join(BASE_DIR, "daemon.lock")
+        try:
+            import fcntl
+            self._lock_file = open(lock_file_path, "w")
+            try:
+                fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except (BlockingIOError, IOError):
+                self._log("Another execution daemon instance is already running (daemon.lock is active). This thread will serve in monitor mode.", "INFO")
+                while True:
+                    time.sleep(30)
+                return
+        except Exception:
+            pass
+
         self._log("Velocity Execution Daemon running live multi-engine loop...")
         while True:
             try:
