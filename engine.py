@@ -663,6 +663,17 @@ class VelocityEngine:
             self._log(f"Scan cycle error: {e}", "ERROR")
         finally:
             self.last_scan_time = datetime.now()
+            try:
+                with open(os.path.join(BASE_DIR, "market_radar.json"), "w") as rf:
+                    json.dump(self.market_radar, rf)
+                with open(os.path.join(BASE_DIR, "scan_heartbeat.json"), "w") as hf:
+                    json.dump({
+                        "last_scan_time": self.last_scan_time.strftime("%Y-%m-%d %H:%M:%S"),
+                        "ts": time.time(),
+                        "cycle": self.cycle_count
+                    }, hf)
+            except Exception:
+                pass
 
     def get_status(self, selected_engine=None):
         """Returns comprehensive status across all 3 engines + Master Portfolio summary."""
@@ -716,9 +727,55 @@ class VelocityEngine:
 
             active_st = engine_statuses.get(self.active_engine_tab, engine_statuses["ladder"])
 
+            # 1. If in-memory market_radar is empty, load from shared disk file
+            if not self.market_radar:
+                try:
+                    radar_path = os.path.join(BASE_DIR, "market_radar.json")
+                    if os.path.exists(radar_path):
+                        with open(radar_path, "r") as rf:
+                            self.market_radar = json.load(rf)
+                except Exception:
+                    pass
+
             now_dt = datetime.now()
+            # 2. If last_scan_time is not in memory, check disk heartbeat
+            if not self.last_scan_time:
+                try:
+                    hb_path = os.path.join(BASE_DIR, "scan_heartbeat.json")
+                    if os.path.exists(hb_path):
+                        with open(hb_path, "r") as hf:
+                            hb = json.load(hf)
+                            if "last_scan_time" in hb:
+                                self.last_scan_time = datetime.strptime(hb["last_scan_time"], "%Y-%m-%d %H:%M:%S")
+                except Exception:
+                    pass
+
             secs_since_scan = (now_dt - self.last_scan_time).total_seconds() if self.last_scan_time else None
             is_loop_healthy = (secs_since_scan is not None and secs_since_scan < 30)
+
+            # 3. Read shared recent logs from server.log if available so all workers share live feed
+            recent_logs = []
+            try:
+                log_file = os.path.join(BASE_DIR, "server.log")
+                if os.path.exists(log_file):
+                    with open(log_file, "r") as lf:
+                        lines = lf.readlines()[-30:]
+                        for line in lines:
+                            line = line.strip()
+                            if line and line.startswith("["):
+                                parts = line.split("] [", 1)
+                                if len(parts) == 2:
+                                    time_part = parts[0].lstrip("[").split(" ")[-1]
+                                    lvl_msg = parts[1].split("] ", 1)
+                                    lvl = lvl_msg[0] if len(lvl_msg) == 2 else "INFO"
+                                    msg = lvl_msg[1] if len(lvl_msg) == 2 else lvl_msg[0]
+                                    recent_logs.append({"time": time_part, "level": lvl, "msg": msg})
+            except Exception:
+                pass
+            if not recent_logs:
+                recent_logs = list(reversed(self.logs[-25:]))
+            else:
+                recent_logs = list(reversed(recent_logs[-25:]))
 
             # Build unified response: backwards-compatible top-level keys + multi-engine blocks
             return {
@@ -731,7 +788,7 @@ class VelocityEngine:
                 "master_portfolio": master_portfolio,
                 "all_active_positions": all_active_positions,
                 "market_radar": self.market_radar,
-                "logs": list(reversed(self.logs[-25:])),
+                "logs": recent_logs,
 
                 # Backwards compatibility fields mapping to active engine tab
                 "trading_mode": active_st["trading_mode"],
@@ -795,28 +852,27 @@ class VelocityEngine:
             self._log(f"Trading mode switched to {mode} ({engine_id})", "ACTION")
 
     def run_forever(self):
-        lock_file_path = os.path.join(BASE_DIR, "daemon.lock")
-        try:
-            import fcntl
-            self._lock_file = open(lock_file_path, "w")
-            try:
-                fcntl.flock(self._lock_file, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            except (BlockingIOError, IOError):
-                self._log("Another execution daemon instance is already running (daemon.lock is active). This thread will serve in monitor mode.", "INFO")
-                while True:
-                    time.sleep(30)
-                return
-        except Exception:
-            pass
-
         self._log("Velocity Execution Daemon running live multi-engine loop...")
+        heartbeat_file = os.path.join(BASE_DIR, "scan_heartbeat.json")
         while True:
             try:
-                self.scan_cycle()
+                now_ts = time.time()
+                should_scan = True
+                if os.path.exists(heartbeat_file):
+                    try:
+                        with open(heartbeat_file, "r") as hf:
+                            hb = json.load(hf)
+                            if now_ts - hb.get("ts", 0) < SCAN_INTERVAL_SECONDS:
+                                should_scan = False
+                    except Exception:
+                        pass
+
+                if should_scan:
+                    self.scan_cycle()
             except Exception as e:
                 try:
                     self._log(f"Execution daemon cycle error: {e}", "ERROR")
                 except Exception:
                     pass
                 time.sleep(2)
-            time.sleep(SCAN_INTERVAL_SECONDS)
+            time.sleep(1)

@@ -23,6 +23,7 @@ def auto_add_virtualenv():
     home_dir = os.path.expanduser("~")
     patterns = [
         os.path.join(home_dir, "virtualenv", "*", "*", "lib", "python3.*", "site-packages"),
+        os.path.join(home_dir, "virtualenv", "*", "*", "lib64", "python3.*", "site-packages"),
         os.path.join(APP_DIR, "venv", "lib", "python3.*", "site-packages"),
         os.path.join(APP_DIR, ".venv", "lib", "python3.*", "site-packages"),
         os.path.join(home_dir, ".local", "lib", "python3.*", "site-packages")
@@ -126,9 +127,10 @@ def application(environ, start_response):
     Standard WSGI entry point called by Phusion Passenger / LiteSpeed.
     Handles all UI & REST API requests synchronously with sub-millisecond latency.
     """
-    # If startup error occurred, show informative setup instructions
-    if _startup_error:
-        error_html = f"""<!DOCTYPE html>
+    try:
+        # If startup error occurred, show informative setup instructions
+        if _startup_error:
+            error_html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -154,96 +156,125 @@ def application(environ, start_response):
   </div>
 </body>
 </html>""".encode("utf-8")
-        headers = [
-            ("Content-Type", "text/html; charset=utf-8"),
-            ("Content-Length", str(len(error_html)))
-        ]
-        start_response("200 OK", headers)
-        return [error_html]
+            headers = [
+                ("Content-Type", "text/html; charset=utf-8"),
+                ("Content-Length", str(len(error_html)))
+            ]
+            start_response("200 OK", headers)
+            return [error_html]
 
-    # Ensure background trading engine is running
-    try:
-        ensure_daemon()
-    except Exception:
-        pass
-
-    path = environ.get("PATH_INFO", "/") or "/"
-    method = environ.get("REQUEST_METHOD", "GET").upper()
-
-    # Route 1: Serve Main UI Dashboard
-    if path in ("/", "/index.html"):
-        index_file = os.path.join(WEB_DIR, "index.html")
-        return _file_response(index_file, start_response, content_type="text/html; charset=utf-8")
-
-    # Route 2: Serve Static Assets (/static/style.css, /static/app.js)
-    if path.startswith("/static/"):
-        rel_path = path[len("/static/"):].lstrip("/")
-        # Prevent directory traversal attacks
-        safe_rel = os.path.normpath(rel_path)
-        if safe_rel.startswith(".."):
-            start_response("403 Forbidden", [("Content-Type", "text/plain")])
-            return [b"Forbidden"]
-        file_path = os.path.join(WEB_DIR, safe_rel)
-        return _file_response(file_path, start_response)
-
-    # Route 3: REST API - Real-Time Multi-Engine Status
-    if path == "/api/status" and method == "GET":
-        query_str = environ.get("QUERY_STRING", "")
-        params = urllib.parse.parse_qs(query_str)
-        engine_id = params.get("engine_id", [None])[0]
-        st = _engine.get_status(selected_engine=engine_id)
-        st["thread_alive"] = bool(_bg_thread and _bg_thread.is_alive())
-        return _json_response(st, start_response)
-
-    # Route 4: REST API - Bot Restart / Verify
-    if path == "/api/restart" and method == "POST":
+        # Ensure background trading engine is running
         try:
             ensure_daemon()
         except Exception:
             pass
-        return _json_response({
-            "success": True,
-            "msg": "Engine thread verified and running",
-            "thread_alive": bool(_bg_thread and _bg_thread.is_alive())
-        }, start_response)
 
-    # Route 5: REST API - Bot Control (Pause / Resume)
-    if path == "/api/control" and method == "POST":
-        payload = _read_json_body(environ)
-        action = payload.get("action", "").lower()
-        eid = payload.get("engine_id") or "all"
-        if action == "pause":
-            _engine.pause_bot(eid)
-            return _json_response({"success": True, "msg": f"Engine ({eid}) paused"}, start_response)
-        elif action in ("resume", "start"):
-            _engine.start_bot(eid)
-            return _json_response({"success": True, "msg": f"Engine ({eid}) resumed"}, start_response)
-        else:
-            return _json_response({"success": False, "msg": "Invalid action"}, start_response, status="400 Bad Request")
+        path = environ.get("PATH_INFO", "/") or "/"
+        method = environ.get("REQUEST_METHOD", "GET").upper()
 
-    # Route 6: REST API - Emergency Close Position
-    if path == "/api/close_position" and method == "POST":
-        payload = _read_json_body(environ)
-        sym = payload.get("symbol")
-        eid = payload.get("engine_id")
-        res = _engine.emergency_close_active(symbol=sym, engine_id=eid)
-        return _json_response(res, start_response)
+        # Route 1: Serve Main UI Dashboard
+        if path in ("/", "/index.html"):
+            index_file = os.path.join(WEB_DIR, "index.html")
+            return _file_response(index_file, start_response, content_type="text/html; charset=utf-8")
 
-    # Route 7: REST API - Update Settings
-    if path == "/api/settings" and method == "POST":
-        payload = _read_json_body(environ)
-        eid = payload.get("engine_id") or "all"
-        if payload.get("mode"):
-            _engine.set_trading_mode(payload["mode"], engine_id=eid)
-        if payload.get("target") is not None and float(payload["target"]) > 0:
-            target_val = float(payload["target"])
-            targets = _engine.engines.values() if eid == "all" else [_engine.engines.get(eid)]
-            for eng in targets:
-                if eng:
-                    eng.state["daily_target"] = target_val
-                    eng._save_state()
-        return _json_response({"success": True, "msg": f"Settings updated for {eid}"}, start_response)
+        # Route 2: Serve Static Assets (/static/style.css, /static/app.js)
+        if path.startswith("/static/"):
+            rel_path = path[len("/static/"):].lstrip("/")
+            safe_rel = os.path.normpath(rel_path)
+            if safe_rel.startswith(".."):
+                start_response("403 Forbidden", [("Content-Type", "text/plain")])
+                return [b"Forbidden"]
+            file_path = os.path.join(WEB_DIR, safe_rel)
+            return _file_response(file_path, start_response)
 
-    # Fallback: 404 Not Found
-    start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
-    return [b"404 Not Found"]
+        # Route 3: REST API - Real-Time Multi-Engine Status
+        if path == "/api/status" and method == "GET":
+            query_str = environ.get("QUERY_STRING", "")
+            params = urllib.parse.parse_qs(query_str)
+            engine_id = params.get("engine_id", [None])[0]
+
+            # If background loop has been idle > 4s (Passenger sleeping thread), perform on-demand scan
+            now_dt = datetime.now()
+            stale = False
+            if _engine.last_scan_time is None:
+                stale = True
+            elif (now_dt - _engine.last_scan_time).total_seconds() > 4:
+                stale = True
+
+            if stale:
+                try:
+                    _engine.scan_cycle()
+                except Exception:
+                    pass
+
+            st = _engine.get_status(selected_engine=engine_id)
+            st["thread_alive"] = bool(_bg_thread and _bg_thread.is_alive())
+            return _json_response(st, start_response)
+
+        # Route 4: REST API - Bot Restart / Verify
+        if path == "/api/restart" and method == "POST":
+            try:
+                ensure_daemon()
+            except Exception:
+                pass
+            return _json_response({
+                "success": True,
+                "msg": "Engine thread verified and running",
+                "thread_alive": bool(_bg_thread and _bg_thread.is_alive())
+            }, start_response)
+
+        # Route 5: REST API - Bot Control (Pause / Resume)
+        if path == "/api/control" and method == "POST":
+            payload = _read_json_body(environ)
+            action = payload.get("action", "").lower()
+            eid = payload.get("engine_id") or "all"
+            if action == "pause":
+                _engine.pause_bot(eid)
+                return _json_response({"success": True, "msg": f"Engine ({eid}) paused"}, start_response)
+            elif action in ("resume", "start"):
+                _engine.start_bot(eid)
+                return _json_response({"success": True, "msg": f"Engine ({eid}) resumed"}, start_response)
+            else:
+                return _json_response({"success": False, "msg": "Invalid action"}, start_response, status="400 Bad Request")
+
+        # Route 6: REST API - Emergency Close Position
+        if path == "/api/close_position" and method == "POST":
+            payload = _read_json_body(environ)
+            sym = payload.get("symbol")
+            eid = payload.get("engine_id")
+            res = _engine.emergency_close_active(symbol=sym, engine_id=eid)
+            return _json_response(res, start_response)
+
+        # Route 7: REST API - Update Settings
+        if path == "/api/settings" and method == "POST":
+            payload = _read_json_body(environ)
+            eid = payload.get("engine_id") or "all"
+            if payload.get("mode"):
+                _engine.set_trading_mode(payload["mode"], engine_id=eid)
+            if payload.get("target") is not None and float(payload["target"]) > 0:
+                target_val = float(payload["target"])
+                targets = _engine.engines.values() if eid == "all" else [_engine.engines.get(eid)]
+                for eng in targets:
+                    if eng:
+                        eng.state["daily_target"] = target_val
+                        eng._save_state()
+            return _json_response({"success": True, "msg": f"Settings updated for {eid}"}, start_response)
+
+        # Fallback: 404 Not Found
+        start_response("404 Not Found", [("Content-Type", "text/plain; charset=utf-8")])
+        return [b"404 Not Found"]
+
+    except Exception as exc:
+        import traceback
+        tb = traceback.format_exc()
+        try:
+            with open(os.path.join(APP_DIR, "stderr.log"), "a") as f:
+                f.write(f"\n--- WSGI RUNTIME ERROR ---\n{tb}\n")
+        except Exception:
+            pass
+        err_page = f"""<!DOCTYPE html><html><body style="background:#0b0e14;color:#fca5a5;padding:30px;font-family:monospace;">
+        <h2 style="color:#ef4444;">⚡ WSGI Runtime Error</h2>
+        <pre style="white-space:pre-wrap;word-break:break-all;">{tb}</pre>
+        </body></html>""".encode("utf-8")
+        start_response("200 OK", [("Content-Type", "text/html; charset=utf-8"), ("Content-Length", str(len(err_page)))])
+        return [err_page]
