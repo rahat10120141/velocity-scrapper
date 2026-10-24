@@ -66,6 +66,14 @@ def get_status(engine_id: Optional[str] = Query(None)):
     clean_data = json.loads(json.dumps(status_data, default=str))
     return JSONResponse(clean_data)
 
+@app.get("/api/daily_ledger")
+def get_daily_ledger():
+    import json
+    status_data = engine.get_status()
+    ledger = status_data.get("daily_ledger", [])
+    clean_data = json.loads(json.dumps(ledger, default=str))
+    return JSONResponse(clean_data)
+
 @app.post("/api/restart")
 def restart_engine():
     ensure_engine_thread()

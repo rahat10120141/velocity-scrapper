@@ -111,7 +111,10 @@ function renderDashboard(data) {
   // 5. Market Radar Matrix
   renderRadar(data.market_radar);
 
-  // 6. Terminal Logs
+  // 6. Date-Wise Daily Performance Ledger
+  renderDailyLedger(data.daily_ledger || []);
+
+  // 7. Terminal Logs
   renderLogs(data.logs);
 }
 
@@ -229,11 +232,12 @@ function renderMasterHero(mp, engines) {
   const wins = mp.today_wins ?? 0;
   const losses = mp.today_losses ?? 0;
 
-  // 1. Total Portfolio Equity
-  setElementText("lblEquityTitle", "Total Portfolio Equity");
-  setElementText("valRealtimeEquity", `$${realtimeEquity.toFixed(2)}`);
+  // 1. Current Portfolio Balance
+  setElementText("lblEquityTitle", "Current Portfolio Balance");
+  setElementText("valRealtimeEquity", `$${totalBalance.toFixed(2)}`);
   setElementText("valStartingBase", `$${(mp.starting_base ?? 300.0).toFixed(2)}`);
-  setElementText("valBalanceBreakdown", `Balance: $${totalBalance.toFixed(2)}`);
+  const eqSign = totalUnreal >= 0 ? "+" : "-";
+  setElementText("valBalanceBreakdown", `Equity: $${realtimeEquity.toFixed(2)} (${eqSign}$${Math.abs(totalUnreal).toFixed(2)})`);
 
   // 2. Floating Unrealized PnL (PROMINENT HIGHLIGHT)
   setElementText("lblFloatingTitle", "Floating Unrealized PnL");
@@ -284,11 +288,12 @@ function renderSingleHero(eng) {
   const wins = eng.today_wins ?? 0;
   const losses = eng.today_losses ?? 0;
 
-  // 1. Single Engine Equity
-  setElementText("lblEquityTitle", `${eng.engine_name || 'Strategy'} Equity`);
-  setElementText("valRealtimeEquity", `$${equity.toFixed(2)}`);
+  // 1. Single Engine Balance
+  setElementText("lblEquityTitle", `${eng.engine_name || 'Strategy'} Balance`);
+  setElementText("valRealtimeEquity", `$${balance.toFixed(2)}`);
   setElementText("valStartingBase", `$${(eng.starting_balance ?? 100.0).toFixed(2)}`);
-  setElementText("valBalanceBreakdown", `Balance: $${balance.toFixed(2)}`);
+  const sEqSign = unreal >= 0 ? "+" : "-";
+  setElementText("valBalanceBreakdown", `Equity: $${equity.toFixed(2)} (${sEqSign}$${Math.abs(unreal).toFixed(2)})`);
 
   // 2. Single Engine Floating PnL
   setElementText("lblFloatingTitle", "Floating Unrealized PnL");
@@ -410,7 +415,9 @@ function renderActiveTrades(positions, isMasterView) {
 
     // Protection Badge logic
     let protBadge = `<span class="badge-tag" style="background: rgba(255,255,255,0.05); color: var(--text-muted);">INITIAL SL DEFENSE</span>`;
-    if (pos.step2_locked) {
+    if (pos.step_locked_usd && pos.step_locked_usd > 0) {
+      protBadge = `<span class="badge-tag theme-ladder">🪜 STEP ${pos.step || 1} LOCKED (+$${pos.step_locked_usd.toFixed(2)})</span>`;
+    } else if (pos.step2_locked) {
       protBadge = `<span class="badge-tag theme-ladder">🪜 STEP 2 LOCKED (+1.0R)</span>`;
     } else if (pos.step1_locked) {
       protBadge = `<span class="badge-tag theme-ladder">🪜 STEP 1 LOCKED (+0.40R)</span>`;
@@ -419,6 +426,10 @@ function renderActiveTrades(positions, isMasterView) {
     } else if (pos.shield_locked || pos.be_locked) {
       protBadge = `<span class="badge-tag theme-ladder">🛡️ FEE SHIELD (ZERO RISK)</span>`;
     }
+
+    const isSlInProfit = isLong ? (pos.sl_price > pos.entry_price) : (pos.sl_price < pos.entry_price);
+    const slColor = isSlInProfit ? "var(--profit-green)" : "var(--loss-red)";
+    const slIcon = isSlInProfit ? " 🔒" : "";
 
     // Engine Badge
     const eid = pos.engine_id || currentTab;
@@ -439,7 +450,7 @@ function renderActiveTrades(positions, isMasterView) {
           </span>
         </td>
         <td class="font-mono">$${formatPrice(pos.entry_price)}</td>
-        <td class="font-mono" style="color: var(--loss-red);">$${formatPrice(pos.sl_price)}</td>
+        <td class="font-mono" style="color: ${slColor}; font-weight: ${isSlInProfit ? '700' : '400'};">$${formatPrice(pos.sl_price)}${slIcon}</td>
         <td class="font-mono" style="color: var(--profit-green);">$${formatPrice(pos.tp_price)}</td>
         <td>
           <div class="font-mono ${pnlClass}" style="font-weight: 700; font-size: 13px;">
@@ -622,6 +633,186 @@ async function emergencyClose(symbol, engineId) {
   } catch (err) {
     console.error("Error closing position:", err);
   }
+}
+
+let expandedDateTrays = new Set();
+
+function toggleDateTrades(dateStr) {
+  if (expandedDateTrays.has(dateStr)) {
+    expandedDateTrays.delete(dateStr);
+  } else {
+    expandedDateTrays.add(dateStr);
+  }
+  if (lastDashboardData) {
+    renderDailyLedger(lastDashboardData.daily_ledger || []);
+  }
+}
+
+function renderDailyLedger(ledger) {
+  const tbody = document.getElementById("dailyLedgerTableBody");
+  const cumPnLEl = document.getElementById("ledgerCumulativePnL");
+  const daysCountEl = document.getElementById("ledgerDaysCount");
+
+  if (!tbody) return;
+
+  if (!ledger || ledger.length === 0) {
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="7" style="text-align: center; color: var(--text-dim); padding: 30px;">
+          <div style="font-size: 13px; font-weight: 500; color: var(--text-secondary); margin-bottom: 4px;">No Closed Trade History Recorded Yet</div>
+          <div style="font-size: 11px; color: var(--text-dim);">Daily performance records will automatically populate here as trades close.</div>
+        </td>
+      </tr>
+    `;
+    if (cumPnLEl) cumPnLEl.textContent = "Cumulative: $0.00";
+    if (daysCountEl) daysCountEl.textContent = "0 Trading Days";
+    return;
+  }
+
+  // Calculate Cumulative Net PnL across recorded history
+  let totalCumulativePnL = 0;
+  for (const row of ledger) {
+    totalCumulativePnL += (row.total_pnl || 0);
+  }
+  if (cumPnLEl) {
+    const cumSign = totalCumulativePnL > 0 ? "+" : (totalCumulativePnL < 0 ? "-" : "");
+    cumPnLEl.textContent = `Cumulative: ${cumSign}$${Math.abs(totalCumulativePnL).toFixed(2)}`;
+    cumPnLEl.style.color = totalCumulativePnL > 0 ? "var(--profit-green)" : (totalCumulativePnL < 0 ? "var(--loss-red)" : "var(--text-muted)");
+  }
+  if (daysCountEl) {
+    daysCountEl.textContent = `${ledger.length} Trading Days Recorded`;
+  }
+
+  const todayStr = new Date().toISOString().split("T")[0];
+
+  let html = "";
+  for (const day of ledger) {
+    const isToday = day.date === todayStr;
+    const isExpanded = expandedDateTrays.has(day.date);
+    const pnl = day.total_pnl || 0;
+    const pnlSign = pnl > 0 ? "+" : (pnl < 0 ? "-" : "");
+    const pnlClass = pnl > 0 ? "pnl-positive" : (pnl < 0 ? "pnl-negative" : "");
+    const pnlColor = pnl > 0 ? "var(--profit-green)" : (pnl < 0 ? "var(--loss-red)" : "var(--text-muted)");
+
+    const lad = day.engines?.ladder || { pnl: 0, trades: 0, wins: 0, losses: 0 };
+    const tra = day.engines?.trailing || { pnl: 0, trades: 0, wins: 0, losses: 0 };
+    const run = day.engines?.runner || { pnl: 0, trades: 0, wins: 0, losses: 0 };
+
+    function formatEngineChip(engData, badge, themeClass) {
+      const ePnl = engData.pnl || 0;
+      const eSign = ePnl > 0 ? "+" : (ePnl < 0 ? "-" : "");
+      const eColor = ePnl > 0 ? "var(--profit-green)" : (ePnl < 0 ? "var(--loss-red)" : "var(--text-dim)");
+      if (engData.trades === 0) {
+        return `<span class="ledger-strat-chip" style="opacity: 0.45; color: var(--text-dim);">$0.00 <span style="font-size: 9px;">(0T)</span></span>`;
+      }
+      return `
+        <span class="ledger-strat-chip ${themeClass}">
+          <span style="color: ${eColor}; font-weight: 700;">${eSign}$${Math.abs(ePnl).toFixed(2)}</span>
+          <span style="font-size: 9px; color: var(--text-dim);">${engData.wins}W/${engData.losses}L</span>
+        </span>
+      `;
+    }
+
+    const tradesCount = day.total_trades || 0;
+    const winRate = day.win_rate || 0;
+
+    html += `
+      <tr style="cursor: pointer; ${isToday ? 'background: rgba(16, 185, 129, 0.03);' : ''}" onclick="toggleDateTrades('${day.date}')">
+        <td>
+          <div class="ledger-date-pill font-mono">
+            <span>${day.date}</span>
+            ${isToday ? '<span class="date-today-badge">TODAY</span>' : ''}
+          </div>
+        </td>
+        <td>
+          <div class="font-mono ${pnlClass}" style="font-weight: 700; font-size: 13px; color: ${pnlColor};">
+            ${pnlSign}$${Math.abs(pnl).toFixed(2)}
+          </div>
+        </td>
+        <td>${formatEngineChip(lad, '🛡️ Ladder', 'theme-ladder')}</td>
+        <td>${formatEngineChip(tra, '⚡ Trailing', 'theme-trailing')}</td>
+        <td>${formatEngineChip(run, '🎯 Runner', 'theme-runner')}</td>
+        <td>
+          <div class="font-mono" style="font-size: 12px; font-weight: 600;">
+            ${tradesCount} Trade${tradesCount === 1 ? '' : 's'}
+          </div>
+          <div style="font-size: 10px; color: var(--text-dim);">
+            ${day.wins}W / ${day.losses}L (${winRate.toFixed(1)}% WR)
+          </div>
+        </td>
+        <td style="text-align: right;">
+          <button class="btn-ledger-toggle ${isExpanded ? 'active' : ''}" onclick="event.stopPropagation(); toggleDateTrades('${day.date}')">
+            ${isExpanded ? '▲ Hide' : '▼ Details'} (${(day.trades || []).length})
+          </button>
+        </td>
+      </tr>
+    `;
+
+    if (isExpanded) {
+      const trades = day.trades || [];
+      let trayRows = "";
+      if (trades.length === 0) {
+        trayRows = `<tr><td colspan="7" style="text-align: center; color: var(--text-dim); padding: 12px;">No trade detail records found for this date</td></tr>`;
+      } else {
+        for (const t of trades) {
+          const tPnl = t.net_pnl || 0;
+          const tSign = tPnl > 0 ? "+" : (tPnl < 0 ? "-" : "");
+          const tClass = tPnl > 0 ? "pnl-positive" : (tPnl < 0 ? "pnl-negative" : "");
+          const tColor = tPnl > 0 ? "var(--profit-green)" : (tPnl < 0 ? "var(--loss-red)" : "var(--text-muted)");
+          const tTime = t.time ? t.time.split(" ")[1] || t.time : "--:--:--";
+          const eTheme = t.engine_id === "ladder" ? "theme-ladder" : (t.engine_id === "trailing" ? "theme-trailing" : "theme-runner");
+          const eBadge = t.engine_badge || (t.engine_id === "ladder" ? "🛡️ LADDER" : (t.engine_id === "trailing" ? "⚡ TRAILING" : "🎯 RUNNER"));
+
+          trayRows += `
+            <tr>
+              <td class="font-mono" style="color: var(--text-dim);">${tTime}</td>
+              <td><span class="badge-tag ${eTheme}" style="font-size: 9px; padding: 1px 4px;">${eBadge}</span></td>
+              <td>
+                <span style="font-weight: 700; color: #fff;">${t.symbol}</span>
+                <span class="badge-tag ${t.direction === 'LONG' ? 'theme-ladder' : 'theme-runner'}" style="font-size: 9px; padding: 1px 4px;">${t.direction}</span>
+              </td>
+              <td class="font-mono">$${formatPrice(t.entry_price)} &rarr; $${formatPrice(t.exit_price)}</td>
+              <td class="font-mono ${tClass}" style="font-weight: 700; color: ${tColor};">${tSign}$${Math.abs(tPnl).toFixed(2)}</td>
+              <td style="color: var(--text-muted); font-size: 10px;">${t.duration_m || 0}m</td>
+              <td><span class="badge-tag" style="font-size: 10px; background: rgba(255,255,255,0.04);">${t.reason || 'EXIT'}</span></td>
+            </tr>
+          `;
+        }
+      }
+
+      html += `
+        <tr id="trade-tray-${day.date}">
+          <td colspan="7" style="padding: 0; background: rgba(9, 13, 22, 0.75);">
+            <div class="date-trades-tray">
+              <div style="font-size: 11px; font-weight: 700; color: var(--accent-blue); margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                <span>📜</span> Closed Trades Executed on ${day.date} (${trades.length} Total Trades)
+              </div>
+              <div class="table-responsive">
+                <table class="mini-tray-table">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Strategy</th>
+                      <th>Pair & Side</th>
+                      <th>Entry &rarr; Exit</th>
+                      <th>Net PnL</th>
+                      <th>Duration</th>
+                      <th>Exit Trigger</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    ${trayRows}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  tbody.innerHTML = html;
 }
 
 // Initial fetch and 2-second background sync

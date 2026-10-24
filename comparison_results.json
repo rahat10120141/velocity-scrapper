@@ -1,0 +1,134 @@
+[
+  {
+    "period": "October 2026 (Live Recorded Market - High Volatility)",
+    "old": {
+      "mode": "OLD",
+      "net": 55.52,
+      "wr": 59.2,
+      "trades": 103,
+      "wins": 61,
+      "losses": 42,
+      "big_wins_10plus": 0,
+      "avg_win": 3.15,
+      "avg_loss": -3.25,
+      "pf": 1.41,
+      "max_dd": 24.79,
+      "return_pct": 18.5
+    },
+    "new": {
+      "mode": "NEW",
+      "net": 63.89,
+      "wr": 78.4,
+      "trades": 236,
+      "wins": 185,
+      "losses": 51,
+      "big_wins_10plus": 0,
+      "avg_win": 1.25,
+      "avg_loss": -3.27,
+      "pf": 1.38,
+      "max_dd": 24.39,
+      "return_pct": 21.3
+    },
+    "diff_net": 8.37,
+    "diff_wr": 19.2
+  },
+  {
+    "period": "2026 Year-to-Date (Jan - Oct 2026, 296 Days)",
+    "old": {
+      "mode": "OLD",
+      "net": 389.52,
+      "wr": 56.2,
+      "trades": 1344,
+      "wins": 755,
+      "losses": 589,
+      "big_wins_10plus": 0,
+      "avg_win": 3.03,
+      "avg_loss": -3.22,
+      "pf": 1.21,
+      "max_dd": 113.76,
+      "return_pct": 129.8
+    },
+    "new": {
+      "mode": "NEW",
+      "net": 476.83,
+      "wr": 74.2,
+      "trades": 3089,
+      "wins": 2292,
+      "losses": 797,
+      "big_wins_10plus": 8,
+      "avg_win": 1.32,
+      "avg_loss": -3.21,
+      "pf": 1.19,
+      "max_dd": 88.05,
+      "return_pct": 158.9
+    },
+    "diff_net": 87.31,
+    "diff_wr": 18.0
+  },
+  {
+    "period": "2025 Full Year (365 Days Historical Trend)",
+    "old": {
+      "mode": "OLD",
+      "net": 156.17,
+      "wr": 52.9,
+      "trades": 1637,
+      "wins": 866,
+      "losses": 771,
+      "big_wins_10plus": 0,
+      "avg_win": 3.0,
+      "avg_loss": -3.17,
+      "pf": 1.06,
+      "max_dd": 122.01,
+      "return_pct": 52.1
+    },
+    "new": {
+      "mode": "NEW",
+      "net": 87.17,
+      "wr": 72.6,
+      "trades": 4122,
+      "wins": 2992,
+      "losses": 1130,
+      "big_wins_10plus": 9,
+      "avg_win": 1.23,
+      "avg_loss": -3.17,
+      "pf": 1.02,
+      "max_dd": 141.34,
+      "return_pct": 29.1
+    },
+    "diff_net": -69.0,
+    "diff_wr": 19.7
+  },
+  {
+    "period": "Multi-Year Combined (2025 - 2026 Complete, 661 Days)",
+    "old": {
+      "mode": "OLD",
+      "net": 538.0,
+      "wr": 54.3,
+      "trades": 2982,
+      "wins": 1620,
+      "losses": 1362,
+      "big_wins_10plus": 0,
+      "avg_win": 3.02,
+      "avg_loss": -3.19,
+      "pf": 1.12,
+      "max_dd": 166.39,
+      "return_pct": 179.3
+    },
+    "new": {
+      "mode": "NEW",
+      "net": 554.84,
+      "wr": 73.2,
+      "trades": 7211,
+      "wins": 5282,
+      "losses": 1929,
+      "big_wins_10plus": 17,
+      "avg_win": 1.27,
+      "avg_loss": -3.19,
+      "pf": 1.09,
+      "max_dd": 155.61,
+      "return_pct": 184.9
+    },
+    "diff_net": 16.84,
+    "diff_wr": 18.9
+  }
+]

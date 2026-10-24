@@ -47,7 +47,8 @@ ALLOCATED_MARGIN_USDT = float(os.getenv("ALLOCATED_MARGIN_USDT", "30.0")) # $30 
 MAX_OPEN_POSITIONS = 3 # Max 3 concurrent positions per engine
 
 # --- STRICT DAILY CIRCUIT BREAKERS ---
-DAILY_PROFIT_TARGET_USDT = float(os.getenv("DAILY_PROFIT_TARGET_USDT", "3.00")) # User Target: $1.00 - $3.00 / day
+DAILY_PROFIT_TARGET_USDT = float(os.getenv("DAILY_PROFIT_TARGET_USDT", "3.00")) # User Target: $1.00 - $3.00 / day per engine
+COMBINED_PROFIT_TARGET_USDT = float(os.getenv("COMBINED_PROFIT_TARGET_USDT", "9.00")) # Master Target across all 3 engines ($9.00 / day)
 DAILY_MAX_LOSS_USDT = float(os.getenv("DAILY_MAX_LOSS_USDT", "6.00"))           # Stop trading if -$6.00 daily loss hits
 MAX_CONSECUTIVE_LOSSES = 2
 COOLDOWN_MINUTES = 30
@@ -58,7 +59,7 @@ PARAMS = {
     "ema_trend": 200,        # 200 EMA Macro Regime Filter
     "atr_period": 14,
     "sl_atr_mult": 1.8,      # Stop Loss distance = 1.8 * ATR
-    "rr_ratio": 2.6,         # Take Profit = 2.6 * Risk (+$7.80 gain on win!)
+    "rr_ratio": 10.0,        # Wide +10R target ($30+) to let trends run to $25+ with step trailing
     "be_trigger_r": 1.2,     # Move SL to Break-Even once profit reaches +1.2R (+$3.60)
     "be_fee_offset": 0.0018, # +0.18% to guarantee net profit after all exchange fees
     "risk_per_trade_usd": 3.00, # Fixed $3.00 risk per trade (3% of $100 account)
@@ -72,42 +73,7 @@ ENGINE_CONFIGS = {
         "id": "runner",
         "name": "Donchian Swing Runner",
         "badge": "🎯 RUNNER",
-        "description": "20h Donchian Breakout + 200 EMA, +1.2R BE Shield, Wide +2.6R TP (Target: +$7.80/win)",
-        "starting_capital": 100.0,
-        "allocated_margin": 30.0,
-        "leverage": 10,
-        "max_positions": 3,
-        "daily_target": 3.0,
-        "daily_max_loss": 6.0,
-        "be_trigger_r": 1.2,             # +1.2R profit triggers Break-Even
-        "be_fee_offset": 0.0018,         # +0.18% fee shield lock
-        "tp_r": 2.6,                     # +2.6R full Take-Profit
-        "state_file": "bot_state_runner.json"
-    },
-    "ladder": {
-        "id": "ladder",
-        "name": "Tactical Step Ladder",
-        "badge": "🛡️ LADDER",
-        "description": "2-Stage Tactical Step Lock: +1.0R Step 1 (+0.50R Lock), +1.8R Step 2 (+1.20R Lock), +2.6R TP",
-        "starting_capital": 100.0,
-        "allocated_margin": 30.0,
-        "leverage": 10,
-        "max_positions": 3,
-        "daily_target": 3.0,
-        "daily_max_loss": 6.0,
-        "fee_shield_offset": 0.0018,
-        "step_1_r_trigger": 1.0,         # +1.0R profit triggers step 1 lock
-        "step_1_r_lock": 0.50,           # lock at +0.50R (guaranteed win!)
-        "step_2_r_trigger": 1.8,         # +1.8R profit triggers step 2 lock
-        "step_2_r_lock": 1.20,           # lock at +1.20R
-        "tp_r": 2.6,                     # +2.6R full Take-Profit
-        "state_file": "bot_state_ladder.json"
-    },
-    "trailing": {
-        "id": "trailing",
-        "name": "Dynamic Volatility Surfer",
-        "badge": "⚡ TRAILING",
-        "description": "Dynamic Volatility Trailing: +1.2R BE Shield, +1.6R Trailing (0.60 sl_dist Behind Peak)",
+        "description": "20h Donchian Breakout + Step-by-Step Profit Lock ($1 to $25+ Unlimited Trend Runner)",
         "starting_capital": 100.0,
         "allocated_margin": 30.0,
         "leverage": 10,
@@ -115,10 +81,45 @@ ENGINE_CONFIGS = {
         "daily_target": 3.0,
         "daily_max_loss": 6.0,
         "be_trigger_r": 1.2,
+        "be_fee_offset": 0.0018,
+        "tp_r": 10.0,                    # Lets $25+ massive trends run freely
+        "state_file": "bot_state_runner.json"
+    },
+    "ladder": {
+        "id": "ladder",
+        "name": "Tactical Step Ladder",
+        "badge": "🛡️ LADDER",
+        "description": "Tactical Step Ratchet: $1 Lock @ $1.20, $1.60 @ $2.50, $2.80 @ $4, 80% Trail to $25+",
+        "starting_capital": 100.0,
+        "allocated_margin": 30.0,
+        "leverage": 10,
+        "max_positions": 3,
+        "daily_target": 3.0,
+        "daily_max_loss": 6.0,
         "fee_shield_offset": 0.0018,
-        "trailing_trigger_r": 1.6,       # +1.6R profit activates dynamic trailing ratchet
-        "trailing_dist_r": 0.60,         # Trails 0.60 * sl_dist behind highest peak
-        "tp_r": 2.8,                     # +2.8R wide runner
+        "step_1_r_trigger": 0.40,
+        "step_1_r_lock": 0.30,
+        "step_2_r_trigger": 0.80,
+        "step_2_r_lock": 0.60,
+        "tp_r": 10.0,
+        "state_file": "bot_state_ladder.json"
+    },
+    "trailing": {
+        "id": "trailing",
+        "name": "Dynamic Volatility Surfer",
+        "badge": "⚡ TRAILING",
+        "description": "Dynamic Volatility Ratchet: Continuous Step Lock from $1 to $25+ Trends",
+        "starting_capital": 100.0,
+        "allocated_margin": 30.0,
+        "leverage": 10,
+        "max_positions": 3,
+        "daily_target": 3.0,
+        "daily_max_loss": 6.0,
+        "be_trigger_r": 1.0,
+        "fee_shield_offset": 0.0018,
+        "trailing_trigger_r": 1.2,
+        "trailing_dist_r": 0.40,
+        "tp_r": 10.0,
         "state_file": "bot_state_trailing.json"
     }
 }

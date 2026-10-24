@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Velocity Quant | Multi-Strategy Portfolio Command Center</title>
   <meta name="description" content="Institutional Multi-Engine Quantitative Trading Command Center for Binance Futures. Real-time portfolio tracking across Hybrid Ladder, Balanced Trailing, and Swing Runner.">
-  <link rel="stylesheet" href="/static/style.css?v=6">
+  <link rel="stylesheet" href="/static/style.css?v=8">
 </head>
 <body>
 
@@ -117,17 +117,17 @@
 
     <!-- Top Hero Metric Grid (4 Metric Cards) -->
     <section class="hero-kpi-grid">
-      <!-- 1. Real-Time Equity (Balance + Floating) -->
-      <div class="kpi-card">
+      <!-- 1. Real-Time Balance & Portfolio Equity -->
+      <div class="kpi-card highlight-balance">
         <div class="kpi-header">
-          <span id="lblEquityTitle">Total Portfolio Equity</span>
+          <span id="lblEquityTitle">Current Portfolio Balance</span>
           <span>💼</span>
         </div>
-        <div class="kpi-value font-mono" id="valRealtimeEquity">$299.52</div>
+        <div class="kpi-value font-mono" id="valRealtimeEquity">$304.87</div>
         <div class="kpi-sub">
           <span>Starting Base:</span>
           <strong id="valStartingBase" class="font-mono" style="color: #fff;">$300.00</strong>
-          <span id="valBalanceBreakdown" style="margin-left: auto;">Balance: $299.96</span>
+          <span id="valBalanceBreakdown" style="margin-left: auto;">Real-Time Equity: $308.39</span>
         </div>
       </div>
 
@@ -319,6 +319,38 @@
       </div>
     </section>
 
+    <!-- Date-Wise Daily Profit & Loss Ledger Section -->
+    <section class="panel-box" id="dailyLedgerSection" style="margin-top: 24px;">
+      <div class="panel-header" style="flex-wrap: wrap; gap: 12px;">
+        <div class="panel-title">
+          <span>📅</span> <span>Daily Profit & Loss Ledger (তারিখভিত্তিক স্ট্র্যাটেজি পারফরম্যান্স)</span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 10px; margin-left: auto;">
+          <span class="badge-tag theme-ladder font-mono" id="ledgerCumulativePnL">Cumulative: +$0.00</span>
+          <span class="badge-tag" style="background: rgba(255,255,255,0.05); font-size: 11px;" id="ledgerDaysCount">0 Trading Days</span>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table id="dailyLedgerTable">
+          <thead>
+            <tr>
+              <th style="min-width: 140px;">Date</th>
+              <th style="min-width: 140px;">Day Net PnL</th>
+              <th style="min-width: 170px;">🛡️ Hybrid Ladder</th>
+              <th style="min-width: 170px;">⚡ Balanced Trailing</th>
+              <th style="min-width: 170px;">🎯 Swing Runner</th>
+              <th style="min-width: 140px;">Trades & Win Rate</th>
+              <th style="text-align: right; min-width: 110px;">Trade Details</th>
+            </tr>
+          </thead>
+          <tbody id="dailyLedgerTableBody">
+            <!-- Dynamically populated via JS -->
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Two-Column Lower Section: Market Radar Matrix & Recent Closed Trades -->
     <section class="two-col-grid">
       <!-- Left: 1H Market Radar Matrix (Shared 6 Cryptos) -->
@@ -392,6 +424,6 @@
 
   </main>
 
-  <script src="/static/app.js?v=7"></script>
+  <script src="/static/app.js?v=8"></script>
 </body>
 </html>
