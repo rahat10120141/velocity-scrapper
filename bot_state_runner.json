@@ -32,13 +32,13 @@
     "step2_locked": false,
     "trail_active": false,
     "be_locked": false,
-    "unrealized_pnl": -0.24,
+    "unrealized_pnl": -0.17,
     "entry_time": "2026-10-24 19:31:56",
     "mfe_price": 730.66,
     "mae_price": 731.8,
     "peak_profit_usd": 0.03,
     "max_drawdown_usd": -0.44,
-    "ticks_observed": 59
+    "ticks_observed": 62
   },
   "closed_trades": [
     {
@@ -581,13 +581,13 @@
       "step2_locked": false,
       "trail_active": false,
       "be_locked": false,
-      "unrealized_pnl": -0.24,
+      "unrealized_pnl": -0.17,
       "entry_time": "2026-10-24 19:31:56",
       "mfe_price": 730.66,
       "mae_price": 731.8,
       "peak_profit_usd": 0.03,
       "max_drawdown_usd": -0.44,
-      "ticks_observed": 59
+      "ticks_observed": 62
     }
   ],
   "max_open_positions": 3
